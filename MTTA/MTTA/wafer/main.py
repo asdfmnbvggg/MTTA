@@ -90,18 +90,7 @@ def evaluate():
     if args.adaptation == "source":
         base_model.eval()
         model = base_model
-    elif args.adaptation == "norm":
-        model = norm.Norm(base_model)
-    elif args.adaptation == "cotta":
-        base_model = cotta.configure_model(base_model)
-        params, param_names = cotta.collect_params(base_model)
-        optimizer = setup_optimizer(params)
-        model = cotta.CoTTA(base_model, optimizer,
-                            steps=args.steps,
-                            episodic=args.episodic,
-                            mt_alpha=args.mt,
-                            rst_m=args.rst,
-                            ap=args.ap)
+
     elif args.adaptation == "tent":
         base_model = tent.configure_model(base_model)
         params, param_names = tent.collect_params(base_model)
@@ -111,45 +100,7 @@ def evaluate():
                           episodic=args.episodic,
                           alpha=args.alpha,
                           criterion=args.criterion)
-    elif args.adaptation == "eata":
-        fisher_dataset = eval("datasets." + f"{args.dataset}".upper())(args.data_dir, transform=transforms.ToTensor())
-        sampled_indices = torch.randperm(len(fisher_dataset))[:args.fisher_size]
-        sampler = SubsetRandomSampler(sampled_indices)
-        fisher_loader = DataLoader(fisher_dataset, batch_size=args.batch_size * 2, sampler=sampler)
-        base_model = eata.configure_model(base_model)
-        params, param_names = eata.collect_params(base_model)
-        ewc_optimizer = optim.SGD(params, 0.001)
-        fishers = {}
-        train_loss_fn = nn.CrossEntropyLoss().cuda()
-        for iter_, (images, targets) in enumerate(fisher_loader, start=1):
-            images, targets = images.cuda(), targets.cuda()
-            outputs = base_model(images)
-            _, targets = outputs.max(1)
-            loss = train_loss_fn(outputs, targets)
-            loss.backward()
-            for name, param in base_model.named_parameters():
-                if param.grad is not None:
-                    if iter_ > 1:
-                        fisher = param.grad.data.clone().detach() ** 2 + fishers[name][0]
-                    else:
-                        fisher = param.grad.data.clone().detach() ** 2
-                    if iter_ == len(fisher_loader):
-                        fisher = fisher / iter_
-                    fishers.update({name: [fisher, param.data.clone().detach()]})
-            ewc_optimizer.zero_grad()
-        del ewc_optimizer
-        optimizer = setup_optimizer(params)
-        model = eata.EATA(base_model, optimizer, fishers, args.fisher_alpha, e_margin=args.e_margin, d_margin=args.d_margin, alpha=args.alpha, criterion=args.criterion)
-    elif args.adaptation == "ostta":
-        base_model = ostta.configure_model(base_model)
-        params, param_names = ostta.collect_params(base_model)
-        optimizer = setup_optimizer(params)
-        model = ostta.OSTTA(base_model, optimizer,
-                            steps=args.steps,
-                            episodic=args.episodic,
-                            alpha=args.alpha,
-                            criterion=args.criterion)
-    # evaluate on each severity and type of corruption in turn
+
     for i in range(args.rounds):
         t = PrettyTable(["corruption", "acc", "auroc", "fpr95tpr", "oscr"])
         top1 = AverageMeter()
