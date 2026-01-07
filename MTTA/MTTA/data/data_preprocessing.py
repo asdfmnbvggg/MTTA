@@ -1,53 +1,74 @@
 import os
-import warnings
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from PIL import Image
 
-warnings.filterwarnings("ignore")
-"""
-Since we will be using labeled data and defective data, 
-we exclude and remove that data.
-"""
 
 DATA_ROOT = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\data"
-PKL_PATH = os.path.join(DATA_ROOT, "LSWMD.pkl")
+DEFECT_PKL = os.path.join(DATA_ROOT, "LSWMD_defect.pkl")
 
-df = pd.read_pickle(PKL_PATH)
+OUT_PKL = os.path.join(DATA_ROOT, "LSWMD_prepro.pkl")
 
-# Function to normalize labels
-def normalize_label(x):
-    if x is None or (isinstance(x, float) and np.isnan(x)):
-        return np.nan
-    if isinstance(x, (list, tuple, np.ndarray)):
-        if len(x) == 0:
-            return np.nan
-        x = x[0]
-    return str(x).strip()
+df = pd.read_pickle(DEFECT_PKL)
 
-tqdm.pandas(desc="Normalizing labels")
-df["failureType_norm"] = df["failureType"].progress_apply(normalize_label)
+print("df shape:", df.shape)
+print("df columns:", df.columns.tolist())
 
-df_labeled = df[df["failureType_norm"].notna()].copy()
+def to_2d_wafer(arr) -> np.ndarray:
+    x = np.array(arr)
+    x = np.squeeze(x)
+    if x.ndim != 2:
+        raise ValueError(f"waferMap is not 2D. shape={x.shape}")
+    return x
 
-label_counts = df_labeled["failureType_norm"].value_counts()
 
-def clean_bracket_string(s):
-    if isinstance(s, str):
-        s = s.strip()
-        if s.startswith("[") and s.endswith("]"):
-            s = s[1:-1].strip().strip("'").strip('"')
-    return s
+def resize_nearest(x: np.ndarray, target_hw=(64, 64)) -> np.ndarray:
+    th, tw = target_hw
+    im = Image.fromarray(x.astype(np.uint8), mode="L")
+    im = im.resize((tw, th), resample=Image.NEAREST)
+    return np.array(im)
 
-df_labeled["failureType_norm"] = df_labeled["failureType_norm"].apply(clean_bracket_string)
+LABEL_COL = "failureType_norm"
+keep_cols = ["waferMap", LABEL_COL]
 
-df_defect = df_labeled[df_labeled["failureType_norm"] != "none"].copy()
+missing = [c for c in keep_cols if c not in df.columns]
+if missing:
+    raise KeyError(f"Missing columns: {missing}")
 
-removed = len(df_labeled) - len(df_defect)
+df = df[keep_cols].copy()
+print("Kept columns:", df.columns.tolist())
 
-defect_counts = df_defect["failureType_norm"].value_counts()
-print(defect_counts.to_string(), flush=True)
+shapes = []
+for wm in df["waferMap"].values:
+    shapes.append(to_2d_wafer(wm).shape)
 
-defect_pkl = os.path.join(DATA_ROOT, "LSWMD_defect.pkl")
+shapes_series = pd.Series(shapes).value_counts()
+print("Top-10 shapes:")
+print(shapes_series.head(10).to_string())
 
-df_defect.to_pickle(defect_pkl)
+max_h = max(s[0] for s in shapes)
+max_w = max(s[1] for s in shapes)
+print("Max shape:", (max_h, max_w))
+
+labels = df[LABEL_COL].astype(str).values
+classes = sorted(pd.unique(labels))
+class_to_idx = {c: i for i, c in enumerate(classes)}
+y = np.array([class_to_idx[c] for c in labels], dtype=np.int64)
+
+print("Classes:", classes)
+print("Label counts:")
+print(pd.Series(labels).value_counts().to_string())
+
+
+TARGET_SIZE = (64, 64)
+
+wafer64_list = []
+for wm in df["waferMap"].values:
+    x = to_2d_wafer(wm)
+    out = resize_nearest(x, TARGET_SIZE) 
+    wafer64_list.append(out.astype(np.uint8))
+
+df["waferMap"] = wafer64_list
+
+df.to_pickle(OUT_PKL)
+print("Saved:", OUT_PKL)

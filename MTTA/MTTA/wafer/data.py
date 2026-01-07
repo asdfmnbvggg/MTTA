@@ -8,17 +8,6 @@ import torchvision.datasets as datasets
 from robustbench.data import _load_dataset, CORRUPTIONS, PREPROCESSINGS
 
 
-def load_svhn(
-    n_examples: Optional[int] = None,
-    data_dir: str = './data',
-    transforms_test: Callable = PREPROCESSINGS[None]
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    dataset = datasets.SVHN(root=data_dir,
-                            split='test',
-                            transform=transforms_test,
-                            download=False)
-    return _load_dataset(dataset, n_examples)
-
 
 def load_svhn_c(
     n_examples: int,
@@ -47,7 +36,6 @@ def load_svhn_c(
                             n_total_svhn]
         n_img = int(np.ceil(n_examples / n_pert))
         x_test_list.append(images[:n_img])
-        # Duplicate the same labels potentially multiple times
         y_test_list.append(labels[:n_img])
 
     x_test, y_test = np.concatenate(x_test_list), np.concatenate(y_test_list)
