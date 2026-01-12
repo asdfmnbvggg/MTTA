@@ -18,7 +18,7 @@ from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 
 import tent
-from data import load_svhn, load_svhn_c
+from data_unknown import load_wafer
 from utils import AverageMeter, get_logger, set_random_seed
 
 
@@ -112,7 +112,7 @@ def evaluate():
                 x_ind, y_ind = eval(f"load_{args.dataset}c")(args.num_ex,
                                                              severity, args.data_dir, False,
                                                              [corruption_type])
-                x_ood, _ = load_svhn_c(args.num_ex, severity, args.data_dir, False, [corruption_type])
+                x_ood, _ = load_wafer(args.num_ex, severity, args.data_dir, False, [corruption_type])
                 x_ind, y_ind, x_ood = x_ind.cuda(), y_ind.cuda(), x_ood.cuda()
                 acc, (auc, fpr), oscr_ = get_results(model, x_ind, y_ind, x_ood, args.batch_size)
                 err = 1. - acc

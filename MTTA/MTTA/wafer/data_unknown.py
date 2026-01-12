@@ -41,7 +41,7 @@ def _to_chw_float01(x: np.ndarray) -> np.ndarray:
     return x
 
 
-def load_wafer_like_svhn_c(
+def load_wafer(
     pkl_path: str,
     n_examples: int,
     shuffle: bool = False,
