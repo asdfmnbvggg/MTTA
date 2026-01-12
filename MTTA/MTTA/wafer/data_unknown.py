@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Union
 
 import numpy as np
 import pandas as pd
@@ -47,14 +47,29 @@ def load_wafer(
     shuffle: bool = False,
     seed: int = 0,
     return_label_mapping: bool = False,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    use_classes: Optional[List[str]] = ['Scratch', 'Random', 'Donut', 'Near-full']
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, Dict[str, int]],
+]:
 
     df = pd.read_pickle(pkl_path)
 
     img_col = _find_existing_col(df, IMG_COL_CANDIDATES)
     label_col = _find_existing_col(df, LABEL_COL_CANDIDATES)
 
-    y_raw = df[label_col].astype(str).to_numpy()
+    df[label_col] = df[label_col].astype(str)
+
+    if use_classes is not None:
+        use_set = set(map(str, use_classes))
+        df = df[df[label_col].isin(use_set)].copy().reset_index(drop=True)
+        if len(df) == 0:
+            raise ValueError(
+                "use_classes 적용 후 df가 비었습니다. "
+                "use_classes와 라벨 값이 일치하는지 확인하세요."
+            )
+
+    y_raw = df[label_col].to_numpy()
     classes = sorted(np.unique(y_raw).tolist())
     class_to_idx = {c: i for i, c in enumerate(classes)}
     y = np.array([class_to_idx[v] for v in y_raw], dtype=np.int64)
@@ -72,7 +87,8 @@ def load_wafer(
         rng = np.random.default_rng(seed)
         rng.shuffle(idx)
 
-    idx = idx[:n_examples]
+    n_take = min(n_examples, N)
+    idx = idx[:n_take]
     x = x[idx]
     y = y[idx]
 
