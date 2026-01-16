@@ -5,21 +5,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
 from iopath.common.file_io import g_pathmgr
 from prettytable import PrettyTable
 from scipy import interpolate
 from sklearn import metrics
-from torch.utils.data import DataLoader, SubsetRandomSampler
+import pandas as pd
+from PIL import Image
+import torchvision.transforms as T
 
-from robustbench.data import load_cifar10c, load_cifar100c
-from robustbench.model_zoo.enums import ThreatModel
-from robustbench.utils import load_model
 
 import tent
-from data_unknown import load_wafer
 from utils import AverageMeter, get_logger, set_random_seed
+from load_Resnet_18 import load_wafer_best_model
+
 
 
 parser = argparse.ArgumentParser()
@@ -46,8 +44,13 @@ parser.add_argument("--batch_size", default=100, type=int)
 parser.add_argument("--rng_seed", default=1, type=int)
 parser.add_argument("--save_dir", default="./output")
 parser.add_argument("--data_dir", default="./data")
-parser.add_argument("--ckpt_dir", default="./ckpt")
-parser.add_argument("--log_dest", default="log.txt")
+parser.add_argument("--ckpt_path", required=True, help="resnet18_wafer_best.pth 경로")
+parser.add_argument("--id_pkl", required=True, help="ID test pkl 경로")
+parser.add_argument("--ood_pkl", required=True, help="OOD test pkl 경로")
+parser.add_argument("--img_col", default="waferMap")
+parser.add_argument("--label_col", default="failureType_norm")
+parser.add_argument("--normalize", action="store_true")
+
 # CoTTA options
 parser.add_argument("--mt", default=0.999, type=float)
 parser.add_argument("--rst", default=0.01, type=float)
@@ -82,11 +85,60 @@ set_random_seed(args.rng_seed)
 logger = get_logger(__name__, args.save_dir, args.log_dest)
 logger.info(f"args:\n{args}")
 
+def _to_pil_1ch(x) -> Image.Image:
+    arr = np.array(x)
+    arr = np.squeeze(arr)
+    if arr.ndim != 2:
+        raise ValueError(f"wafer image not 2D after squeeze. shape={arr.shape}")
+
+    if arr.dtype != np.uint8:
+        a_min, a_max = arr.min(), arr.max()
+        if a_max > a_min:
+            arr = (arr - a_min) / (a_max - a_min)
+        arr = (arr * 255.0).astype(np.uint8)
+    return Image.fromarray(arr, mode="L")
+
+def load_wafer_from_pkl(
+    pkl_path: str,
+    img_col: str,
+    label_col,
+    class_to_idx,
+    img_size: int,
+    normalize: bool,
+    max_n: int,
+):
+    df = pd.read_pickle(pkl_path)
+
+    tfms = [T.Resize((img_size, img_size)), T.ToTensor()]
+    if normalize:
+        tfms.append(T.Normalize(mean=[0.5], std=[0.5]))
+    tfm = T.Compose(tfms)
+
+    if label_col is not None:
+        df[label_col] = df[label_col].astype(str).str.strip()
+
+    n = min(len(df), max_n)
+    xs = []
+    ys = [] if label_col is not None else None
+
+    for i in range(n):
+        row = df.iloc[i]
+        img = _to_pil_1ch(row[img_col])
+        xs.append(tfm(img))
+
+        if label_col is not None:
+            lab = str(row[label_col]).strip()
+            if lab not in class_to_idx:
+                raise KeyError(f"라벨 '{lab}'이 class_to_idx에 없습니다.")
+            ys.append(class_to_idx[lab])
+
+    x = torch.stack(xs, dim=0)
+    y = torch.tensor(ys, dtype=torch.long) if ys is not None else None
+    return x, y
 
 def evaluate():
-    # configure model
-    base_model = load_model(args.arch, args.ckpt_dir,
-                            args.dataset, ThreatModel.corruptions).cuda()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    base_model, class_to_idx, img_size = load_wafer_best_model(args.ckpt_path, device)
     if args.adaptation == "source":
         base_model.eval()
         model = base_model
@@ -109,11 +161,26 @@ def evaluate():
             for corruption_type in args.type:
                 # continual adaptation for all corruption
                 logger.info("not resetting model")
-                x_ind, y_ind = eval(f"load_{args.dataset}c")(args.num_ex,
-                                                             severity, args.data_dir, False,
-                                                             [corruption_type])
-                x_ood, _ = load_wafer(args.num_ex, severity, args.data_dir, False, [corruption_type])
-                x_ind, y_ind, x_ood = x_ind.cuda(), y_ind.cuda(), x_ood.cuda()
+                x_ind, y_ind = load_wafer_from_pkl(
+                    pkl_path=args.id_pkl,
+                    img_col=args.img_col,
+                    label_col=args.label_col,
+                    class_to_idx=class_to_idx,   # ckpt에서 가져옴
+                    img_size=img_size,           # ckpt에서 가져옴
+                    normalize=args.normalize,
+                    max_n=args.num_ex,
+                )
+                x_ood, _ = load_wafer_from_pkl(
+                    pkl_path=args.ood_pkl,
+                    img_col=args.img_col,
+                    label_col=None,        # OOD는 라벨 없어도 됨
+                    class_to_idx=None,
+                    img_size=img_size,
+                    normalize=args.normalize,
+                    max_n=args.num_ex,
+                )
+
+                x_ind, y_ind, x_ood = x_ind.to(device), y_ind.to(device), x_ood.to(device)
                 acc, (auc, fpr), oscr_ = get_results(model, x_ind, y_ind, x_ood, args.batch_size)
                 err = 1. - acc
                 logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
