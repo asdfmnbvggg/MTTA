@@ -126,21 +126,19 @@ def evaluate():
                 logger.info("not resetting model")
                 x_ind, y_ind = load_wafer(
                     pkl_path=args.id_pkl,
-                    img_col=args.img_col,
-                    label_col=args.label_col,
-                    class_to_idx=class_to_idx,   # ckpt에서 가져옴
-                    img_size=img_size,           # ckpt에서 가져옴
-                    normalize=args.normalize,
-                    max_n=args.num_ex,
+                    n_examples=args.num_ex,
+                    shuffle=False,
+                    seed=args.rng_seed,
+                    return_label_mapping=True,
+                    use_classes=None
                 )
                 x_ood, _ = load_wafer(
                     pkl_path=args.ood_pkl,
-                    img_col=args.img_col,
-                    label_col=None,        # OOD는 라벨 없어도 됨
-                    class_to_idx=None,
-                    img_size=img_size,
-                    normalize=args.normalize,
-                    max_n=args.num_ex,
+                    n_examples=args.num_ex,
+                    shuffle=False,
+                    seed=args.rng_seed,
+                    return_label_mapping=False,
+                    use_classes=None
                 )
 
                 x_ind, y_ind, x_ood = x_ind.to(device), y_ind.to(device), x_ood.to(device)

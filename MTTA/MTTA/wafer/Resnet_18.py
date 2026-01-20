@@ -1,7 +1,7 @@
 # train_resnet_wafer_min.py
 import os
 import random
-from typing import Dict, Tuple
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -17,14 +17,13 @@ from torchvision.models import resnet18
 
 
 class CFG:
-    pkl_path: str = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\data\LSWMD_prepro.pkl"
+    pkl_path: str = r"C:\Users\1423\Downloads\MTTA\MTTA-2\MTTA\MTTA\data\LSWD_id.pkl"
     save_dir: str = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\wafer"
     seed: int = 1
 
     img_col: str = "waferMap"
     label_col: str = "failureType_norm"
 
-    use_classes: Tuple[str, ...] = ("Edge-Ring", "Edge-Loc", "Center", "Loc")
     test_ratio: float = 0.2
     epochs: int = 30
     batch_size: int = 128
@@ -49,6 +48,7 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+
 def stratified_split_indices(labels: np.ndarray, test_ratio: float, seed: int):
     rng = np.random.default_rng(seed)
     train_idx, test_idx = [], []
@@ -61,6 +61,7 @@ def stratified_split_indices(labels: np.ndarray, test_ratio: float, seed: int):
     rng.shuffle(train_idx)
     rng.shuffle(test_idx)
     return np.array(train_idx), np.array(test_idx)
+
 
 class WaferDataset(Dataset):
     def __init__(
@@ -83,8 +84,6 @@ class WaferDataset(Dataset):
     def _to_pil(self, x) -> Image.Image:
         arr = np.array(x)
         arr = np.squeeze(arr)
-        if arr.ndim != 2:
-            raise ValueError(f"wafer image not 2D after squeeze. shape={arr.shape}")
 
         if arr.dtype != np.uint8:
             a_min, a_max = arr.min(), arr.max()
@@ -179,23 +178,21 @@ def main():
     os.makedirs(cfg.save_dir, exist_ok=True)
 
     df = pd.read_pickle(cfg.pkl_path)
-
     df[cfg.label_col] = df[cfg.label_col].astype(str).str.strip()
 
-    df_f = df[df[cfg.label_col].isin(cfg.use_classes)].copy()
-    if len(df_f) == 0:
-        raise ValueError(f"No rows found for classes {cfg.use_classes} in '{cfg.label_col}'.")
+    classes = sorted(df[cfg.label_col].unique().tolist())
+    class_to_idx = {c: i for i, c in enumerate(classes)}
+    num_classes = len(classes)
 
-    class_to_idx = {c: i for i, c in enumerate(cfg.use_classes)}
-    num_classes = len(cfg.use_classes)
+    y_all = df[cfg.label_col].map(class_to_idx).to_numpy()
 
-    y_all = df_f[cfg.label_col].map(class_to_idx).to_numpy()
     tr_idx, te_idx = stratified_split_indices(y_all, cfg.test_ratio, cfg.seed)
+    df_tr = df.iloc[tr_idx].copy()
+    df_te = df.iloc[te_idx].copy()
 
-    df_tr = df_f.iloc[tr_idx].copy()
-    df_te = df_f.iloc[te_idx].copy()
-
-    print("=== Class counts (train) ===")
+    print("=== Classes ===")
+    print(classes)
+    print("\n=== Class counts (train) ===")
     print(df_tr[cfg.label_col].value_counts().to_string())
     print("\n=== Class counts (test) ===")
     print(df_te[cfg.label_col].value_counts().to_string())
@@ -232,6 +229,8 @@ def main():
     best_acc = -1.0
     best_path = os.path.join(cfg.save_dir, "resnet18_wafer_best.pth")
 
+    print(f"[Config] pkl={cfg.pkl_path}")
+    print(f"[Config] num_classes={num_classes}")
     print(f"[Config] use_groupnorm={cfg.use_groupnorm}, gn_groups={cfg.gn_groups}, lr={cfg.lr}")
 
     for epoch in range(1, cfg.epochs + 1):
@@ -247,6 +246,7 @@ def main():
                 {
                     "model_state": model.state_dict(),
                     "class_to_idx": class_to_idx,
+                    "classes": classes,
                     "img_size": cfg.img_size,
                     "use_groupnorm": cfg.use_groupnorm,
                     "gn_groups": cfg.gn_groups,
