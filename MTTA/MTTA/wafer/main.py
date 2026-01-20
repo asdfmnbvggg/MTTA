@@ -17,6 +17,7 @@ import torchvision.transforms as T
 import tent
 from utils import AverageMeter, get_logger, set_random_seed
 from load_Resnet_18 import load_wafer_best_model
+from data_unknown import load_wafer
 
 
 
@@ -98,44 +99,6 @@ def _to_pil_1ch(x) -> Image.Image:
         arr = (arr * 255.0).astype(np.uint8)
     return Image.fromarray(arr, mode="L")
 
-def load_wafer_from_pkl(
-    pkl_path: str,
-    img_col: str,
-    label_col,
-    class_to_idx,
-    img_size: int,
-    normalize: bool,
-    max_n: int,
-):
-    df = pd.read_pickle(pkl_path)
-
-    tfms = [T.Resize((img_size, img_size)), T.ToTensor()]
-    if normalize:
-        tfms.append(T.Normalize(mean=[0.5], std=[0.5]))
-    tfm = T.Compose(tfms)
-
-    if label_col is not None:
-        df[label_col] = df[label_col].astype(str).str.strip()
-
-    n = min(len(df), max_n)
-    xs = []
-    ys = [] if label_col is not None else None
-
-    for i in range(n):
-        row = df.iloc[i]
-        img = _to_pil_1ch(row[img_col])
-        xs.append(tfm(img))
-
-        if label_col is not None:
-            lab = str(row[label_col]).strip()
-            if lab not in class_to_idx:
-                raise KeyError(f"라벨 '{lab}'이 class_to_idx에 없습니다.")
-            ys.append(class_to_idx[lab])
-
-    x = torch.stack(xs, dim=0)
-    y = torch.tensor(ys, dtype=torch.long) if ys is not None else None
-    return x, y
-
 def evaluate():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     base_model, class_to_idx, img_size = load_wafer_best_model(args.ckpt_path, device)
@@ -161,7 +124,7 @@ def evaluate():
             for corruption_type in args.type:
                 # continual adaptation for all corruption
                 logger.info("not resetting model")
-                x_ind, y_ind = load_wafer_from_pkl(
+                x_ind, y_ind = load_wafer(
                     pkl_path=args.id_pkl,
                     img_col=args.img_col,
                     label_col=args.label_col,
@@ -170,7 +133,7 @@ def evaluate():
                     normalize=args.normalize,
                     max_n=args.num_ex,
                 )
-                x_ood, _ = load_wafer_from_pkl(
+                x_ood, _ = load_wafer(
                     pkl_path=args.ood_pkl,
                     img_col=args.img_col,
                     label_col=None,        # OOD는 라벨 없어도 됨
