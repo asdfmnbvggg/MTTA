@@ -102,25 +102,15 @@ def forward_and_adapt(x, model0, model, optimizer, alpha, criterion):
     optimizer.zero_grad()
     return outputs
 
-
 def collect_params(model):
-    """Collect the affine scale + shift parameters from batch norms.
-
-    Walk the model's modules and collect all batch normalization parameters.
-    Return the parameters and their names.
-
-    Note: other choices of parameterization are possible!
-    """
-    params = []
-    names = []
+    params, names = [], []
     for nm, m in model.named_modules():
-        if isinstance(m, nn.BatchNorm2d):
-            for np, p in m.named_parameters():
-                if np in ['weight', 'bias']:  # weight is scale, bias is shift
+        if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d, nn.GroupNorm, nn.LayerNorm)):
+            for pn, p in m.named_parameters(recurse=False):
+                if pn in ["weight", "bias"] and p.requires_grad:
                     params.append(p)
-                    names.append(f"{nm}.{np}")
+                    names.append(f"{nm}.{pn}")
     return params, names
-
 
 def copy_model_and_optimizer(model, optimizer):
     """Copy the model and optimizer states for resetting after adaptation."""
@@ -134,23 +124,20 @@ def load_model_and_optimizer(model, optimizer, model_state, optimizer_state):
     model.load_state_dict(model_state, strict=True)
     optimizer.load_state_dict(optimizer_state)
 
-
 def configure_model(model):
-    """Configure model for use with tent."""
-    # train mode, because tent optimizes the model to minimize entropy
     model.train()
-    # disable grad, to (re-)enable only what tent updates
     model.requires_grad_(False)
-    # configure norm for tent updates: enable grad + force batch statisics
+
     for m in model.modules():
-        if isinstance(m, nn.BatchNorm2d):
+        if isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d, nn.GroupNorm, nn.LayerNorm)):
             m.requires_grad_(True)
-            # force use of batch stats in train and eval modes
+
+        if isinstance(m, nn.BatchNorm2d):
             m.track_running_stats = False
             m.running_mean = None
             m.running_var = None
-    return model
 
+    return model
 
 def check_model(model):
     is_training = model.training
