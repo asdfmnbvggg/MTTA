@@ -1,0 +1,8 @@
+[2026-01-30 15:15:14,825] (main.py:  65): args:
+Namespace(adaptation='source', episodic=False, steps=1, lr=0.001, method='Adam', momentum=0.9, batch_size=100, rng_seed=1, save_dir='./output', data_dir='./data', ckpt_path='C:\\Users\\1423\\Downloads\\MTTA\\MTTA-2\\MTTA\\MTTA\\wafer\\resnet18_wafer_best.pth', id_pkl='C:\\Users\\1423\\Downloads\\MTTA\\MTTA-2\\MTTA\\MTTA\\data\\LSWD_id_test.pkl', ood_pkl='C:\\Users\\1423\\Downloads\\MTTA\\MTTA-2\\MTTA\\MTTA\\data\\LSWD_ood.pkl', img_col='waferMap', label_col='failureType_norm', normalize=True, mt=0.999, rst=0.01, ap=0.92, alpha=[0.5], criterion='ent', rounds=1, fisher_size=2000, fisher_alpha=1.0, e_margin=0.9210340371976184, d_margin=0.05, log_dest='wafer_source_lr0.001_steps1_alpha0.5_ent.txt')
+[2026-01-30 15:15:24,956] (main.py: 113): results:
++-------+--------+--------+----------+--------+
+| round |  acc   | auroc  | fpr95tpr |  oscr  |
++-------+--------+--------+----------+--------+
+|   0   | 49.30% | 39.50% |  97.43%  | 21.92% |
++-------+--------+--------+----------+--------+

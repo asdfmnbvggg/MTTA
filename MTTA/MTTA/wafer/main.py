@@ -18,18 +18,17 @@ from data_unknown import load_wafer
 
 parser = argparse.ArgumentParser()
 
-# Model options
 parser.add_argument("--adaptation", default="tent",
                     choices=["source", "tent"])
 parser.add_argument("--episodic", action="store_true")
-# Optimizer options
+
 parser.add_argument("--steps", default=1, type=int)
 parser.add_argument("--lr", default=1e-3, type=float)
 parser.add_argument("--method", default="Adam", choices=["Adam", "SGD"])
 parser.add_argument("--momentum", default=0.9, type=float)
-# Testing options
+
 parser.add_argument("--batch_size", default=100, type=int)
-# Misc options
+
 parser.add_argument("--rng_seed", default=1, type=int)
 parser.add_argument("--save_dir", default="./output")
 parser.add_argument("--data_dir", default="./data")
@@ -40,19 +39,10 @@ parser.add_argument("--img_col", default="waferMap")
 parser.add_argument("--label_col", default="failureType_norm")
 parser.add_argument("--normalize", action="store_true")
 
-# CoTTA options
-parser.add_argument("--mt", default=0.999, type=float)
-parser.add_argument("--rst", default=0.01, type=float)
-parser.add_argument("--ap", default=0.92, type=float)
-# Tent options
+#Tent model option
 parser.add_argument("--alpha", nargs="+", default=[0.5], type=float)
 parser.add_argument("--criterion", default="ent", choices=["ent", "ent_ind", "ent_ind_ood", "ent_unf"])
 parser.add_argument("--rounds", default=1, type=int)
-# EATA options
-parser.add_argument("--fisher_size", default=2000, type=int)
-parser.add_argument("--fisher_alpha", default=1., type=float)
-parser.add_argument("--e_margin", default=math.log(10)*0.40, type=float)
-parser.add_argument("--d_margin", default=0.05, type=float)
 
 args = parser.parse_args()
 
@@ -66,7 +56,7 @@ logger.info(f"args:\n{args}")
 
 def evaluate():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    base_model, class_to_idx, img_size = load_wafer_best_model(args.ckpt_path, device)
+    base_model, _, img_size = load_wafer_best_model(args.ckpt_path, device)
 
     if args.adaptation == "source":
         base_model.eval()
@@ -85,7 +75,7 @@ def evaluate():
     else:
         raise ValueError(args.adaptation)
 
-    # ✅ 데이터 로드 (한 번만)
+    #data load
     x_ind, y_ind, _ = load_wafer(
         pkl_path=args.id_pkl,
         n_examples=10**9,
@@ -132,7 +122,7 @@ def get_results(model: nn.Module,
         device = x_ind.device
 
     # ✅ ID/OOD 길이 다를 때 안전하게
-    n_total = min(x_ind.shape[0], x_ood.shape[0])
+    n_total = x_ind.shape[0]
     n_batches = math.ceil(n_total / batch_size)
 
     acc = 0.0
@@ -157,8 +147,7 @@ def get_results(model: nn.Module,
             y_ind_curr = y_ind[s:e].to(device)
             x_ood_curr = x_ood[s:e].to(device)
 
-            # (혹시 마지막 배치에서 한쪽이 비면 스킵)
-            if x_ind_curr.shape[0] == 0 or x_ood_curr.shape[0] == 0:
+            if x_ind_curr.shape[0] == 0:
                 continue
 
             x_curr = torch.cat((x_ind_curr, x_ood_curr), dim=0)
@@ -183,6 +172,7 @@ def get_results(model: nn.Module,
     acc = acc / n_total
     auc, fpr = get_ood_metrics(y_true.numpy(), y_score.numpy())
     oscr_ = get_oscr(score_ind.numpy(), score_ood.numpy(), pred.numpy(), y_ind[:n_total].detach().cpu().numpy())
+
     return acc, (auc, fpr), oscr_
 
 
