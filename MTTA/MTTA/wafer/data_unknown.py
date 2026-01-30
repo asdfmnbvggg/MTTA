@@ -14,10 +14,6 @@ def _find_existing_col(df: pd.DataFrame, candidates: List[str]) -> str:
     for c in candidates:
         if c in df.columns:
             return c
-    raise KeyError(
-        f"df에 {candidates} 중 어떤 컬럼도 없습니다.\n"
-        f"현재 df columns: {df.columns.tolist()}"
-    )
 
 
 def _to_chw_float01(x: np.ndarray) -> np.ndarray:
@@ -63,11 +59,6 @@ def load_wafer(
     if use_classes is not None:
         use_set = set(map(str, use_classes))
         df = df[df[label_col].isin(use_set)].copy().reset_index(drop=True)
-        if len(df) == 0:
-            raise ValueError(
-                "use_classes 적용 후 df가 비었습니다. "
-                "use_classes와 라벨 값이 일치하는지 확인하세요."
-            )
 
     y_raw = df[label_col].to_numpy()
     classes = sorted(np.unique(y_raw).tolist())
