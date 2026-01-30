@@ -56,15 +56,16 @@ logger.info(f"args:\n{args}")
 
 def evaluate():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    base_model, _, img_size = load_wafer_best_model(args.ckpt_path, device)
+    base_model, _, _ = load_wafer_best_model(args.ckpt_path, device) #pe-trained model load
 
     if args.adaptation == "source":
         base_model.eval()
         model = base_model
     elif args.adaptation == "tent":
-        base_model = tent.configure_model(base_model)
+        base_model = tent.configure_model(base_model) #Only BatchNorm layer change else freeze
         params, _ = tent.collect_params(base_model)
         optimizer = setup_optimizer(params)
+        #froward with test-time adaptation
         model = tent.Tent(
             base_model, optimizer,
             steps=args.steps,
@@ -103,6 +104,7 @@ def evaluate():
         logger.info(f"results:\n{t}")
 
 
+#optimizer setup
 def setup_optimizer(params):
     if args.method == "Adam":
         return optim.Adam(params, lr=args.lr)
@@ -112,7 +114,7 @@ def setup_optimizer(params):
         raise NotImplementedError
 
 
-def get_results(model: nn.Module,
+def get_results(model: nn.Module, #pre-trainiged model
                 x_ind: torch.Tensor,
                 y_ind: torch.Tensor,
                 x_ood: torch.Tensor,
@@ -121,11 +123,9 @@ def get_results(model: nn.Module,
     if device is None:
         device = x_ind.device
 
-    # ✅ ID/OOD 길이 다를 때 안전하게
     n_total = x_ind.shape[0]
     n_batches = math.ceil(n_total / batch_size)
 
-    acc = 0.0
     y_true = torch.zeros((0,), dtype=torch.float32)
     y_score = torch.zeros((0,), dtype=torch.float32)
     score_ind = torch.zeros((0,), dtype=torch.float32)
@@ -134,7 +134,7 @@ def get_results(model: nn.Module,
 
     is_tent = (args.adaptation == "tent")
 
-    # tent면 학습 모드/grad 필요, source면 eval/no_grad
+    #if tent use grad, else no grad
     model.train() if is_tent else model.eval()
     context = torch.enable_grad() if is_tent else torch.no_grad()
 
@@ -150,21 +150,22 @@ def get_results(model: nn.Module,
             if x_ind_curr.shape[0] == 0:
                 continue
 
-            x_curr = torch.cat((x_ind_curr, x_ood_curr), dim=0)
+            x_curr = torch.cat((x_ind_curr, x_ood_curr), dim=0)#OOD metric labeling
 
-            output = model(x_curr)
-            energy = output.logsumexp(1)
+            output = model(x_curr) #model forward. logits:[batch,num_classes]
+            energy = output.logsumexp(1)#ID is high energy, OOD is low energy
             prob = output.softmax(1)
             _, pred_ = prob.max(1)
 
+            #batch accuracy
             n_id = x_ind_curr.shape[0]
             acc += (pred_[:n_id] == y_ind_curr).float().sum().item()
 
             y_true = torch.cat((y_true,
                                 torch.cat((torch.ones(n_id), torch.zeros(x_ood_curr.shape[0])))), dim=0)
-            y_score = torch.cat((y_score, energy.detach().cpu()), dim=0)
+            y_score = torch.cat((y_score, energy.detach().cpu()), dim=0) #energy score save for AUROC
 
-            score_ind = torch.cat((score_ind, energy[:n_id].detach().cpu()), dim=0)
+            score_ind = torch.cat((score_ind, energy[:n_id].detach().cpu()), dim=0) #energy score save for OSCR
             score_ood = torch.cat((score_ood, energy[n_id:].detach().cpu()), dim=0)
 
             pred = torch.cat((pred, pred_[:n_id].detach().cpu().long()), dim=0)
@@ -176,9 +177,9 @@ def get_results(model: nn.Module,
     return acc, (auc, fpr), oscr_
 
 
-def get_ood_metrics(y_true, y_score):
+def get_ood_metrics(y_true, y_score): 
     auroc = metrics.roc_auc_score(y_true, y_score)
-    fpr, tpr, thresholds = metrics.roc_curve(y_true, y_score)
+    fpr, tpr, _ = metrics.roc_curve(y_true, y_score)
     return auroc, float(interpolate.interp1d(tpr, fpr)(0.95))
 
 
