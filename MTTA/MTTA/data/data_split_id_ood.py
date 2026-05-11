@@ -1,6 +1,6 @@
 import pandas as pd
 
-PKL_PATH = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\data\LSWMD_prepro.pkl"
+PKL_PATH = r".\MTTA\MTTA\data\LSWMD_prepro.pkl"
 df = pd.read_pickle(PKL_PATH)
 
 ood_classes = ['Scratch', 'Random', 'Donut', 'Near-full']
