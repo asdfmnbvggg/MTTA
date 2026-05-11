@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-DATA_ROOT = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\data"
+DATA_ROOT = r"데이터경로"
 PKL_64 = os.path.join(DATA_ROOT, "LSWMD_prepro.pkl")
 
 LABEL_COL = "failureType_norm"
