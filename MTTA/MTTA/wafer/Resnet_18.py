@@ -18,10 +18,9 @@ from torchvision.models import resnet18
 
 
 class CFG:
-    # 기본값(원하면 CLI로 덮어씀)
-    pkl_path: str = r"C:\Users\1423\Downloads\MTTA\MTTA-2\MTTA\MTTA\data\LSWD_id_train.pkl"
-    test_pkl_path: Optional[str] = None  # ✅ 추가: 외부 테스트 경로
-    save_dir: str = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\wafer"
+    pkl_path: str = r".\MTTA\MTTA\data\LSWD_id_train.pkl"
+    test_pkl_path: Optional[str] = None  
+    save_dir: str = r".\MTTA\MTTA\wafer"
     seed: int = 1
 
     img_col: str = "waferMap"
