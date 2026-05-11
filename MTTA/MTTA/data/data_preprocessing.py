@@ -4,7 +4,7 @@ import pandas as pd
 from PIL import Image
 
 
-DATA_ROOT = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\data"
+DATA_ROOT = r".\MTTA\MTTA\data"
 DEFECT_PKL = os.path.join(DATA_ROOT, "LSWMD_defect.pkl")
 
 OUT_PKL = os.path.join(DATA_ROOT, "LSWMD_prepro.pkl")
