@@ -10,7 +10,7 @@ Since we will be using labeled data and defective data,
 we exclude and remove that data.
 """
 
-DATA_ROOT = r"C:\Users\1423\Downloads\MTTA\-\MTTA\MTTA\data"
+DATA_ROOT = r".\MTTA\MTTA\data"
 PKL_PATH = os.path.join(DATA_ROOT, "LSWMD.pkl")
 
 df = pd.read_pickle(PKL_PATH)
