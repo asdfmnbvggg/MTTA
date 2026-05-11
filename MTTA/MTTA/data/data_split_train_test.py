@@ -1,10 +1,10 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-pkl_path = r"C:\Users\1423\Downloads\MTTA\MTTA-2\MTTA\MTTA\data\LSWD_id.pkl"
+pkl_path = r".\MTTA\MTTA\data\LSWD_id.pkl"
 
-train_path = r"C:\Users\1423\Downloads\MTTA\MTTA-2\MTTA\MTTA\data\LSWD_id_train.pkl"
-test_path  = r"C:\Users\1423\Downloads\MTTA\MTTA-2\MTTA\MTTA\data\LSWD_id_test.pkl"
+train_path = r".\MTTA\MTTA\data\LSWD_id_train.pkl"
+test_path  = r".\MTTA\MTTA\data\LSWD_id_test.pkl"
 
 df = pd.read_pickle(pkl_path)
 
